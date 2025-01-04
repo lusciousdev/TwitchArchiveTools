@@ -178,7 +178,7 @@ def archive_range(twitch_api : TwitchAPI, gql_api : TwitchGQL_API, mediacms_api 
   continue_fetching = True
 
   clip_params = {
-    "first": 5,
+    "first": 50,
     "broadcaster_id": broadcaster_id,
     "started_at": start_datetime.astimezone(pytz.utc).strftime(TWITCH_API_TIME_FORMAT),
     "ended_at": end_datetime.astimezone(pytz.utc).strftime(TWITCH_API_TIME_FORMAT)

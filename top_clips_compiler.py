@@ -27,6 +27,8 @@ if __name__ == '__main__':
   parser.add_argument('--end', "-e", default="2022-12-31T12:59:59Z", help="End of clip search")
   parser.add_argument('--buffer', '-b', default=8, type=int, help="Number of hours before/after period to consider")
   parser.add_argument('--stream', default="", help="Limit vids to one stream. This should be the video ID of the stream.")
+  parser.add_argument('--creator', default=None, help="Limit vids to one clip creator.")
+  parser.add_argument('--title', default=None, help="Limit vids to clips with title match.")
   parser.add_argument('--channel', '-c', default="itswill", help="Twitch channel name")
   parser.add_argument('--max', "-m", default=20, type=int, help="Max clips to compile into the video.")
   parser.add_argument('--secrets', '-p', default="./secrets.json", help="JSON file with credentials")
@@ -79,12 +81,13 @@ if __name__ == '__main__':
   stats['chat']   = { 'list': [] }
 
   num_clips = 0
+  num_checked = 0
   video_clips = []
   after = ""
   continue_fetching = True
   continue_adding = True
   clip_params = {
-    "first": 5,
+    "first": 100,
     "broadcaster_id": user_id,
     "started_at": buffered_start_datetime.astimezone(pytz.utc).strftime(TWITCH_API_TIME_FORMAT),
     "ended_at": buffered_end_datetime.astimezone(pytz.utc).strftime(TWITCH_API_TIME_FORMAT)
@@ -98,11 +101,18 @@ if __name__ == '__main__':
       continue_fetching = False
 
     for clip in clips:
+      num_checked += 1
       views = int(clip["view_count"])
       clip_date = pytz.utc.localize(get_clip_true_time(twitch_api, clip), is_dst=None).astimezone(local)
       
       if not (buffered_start_datetime < clip_date < buffered_end_datetime):
         print("Clip not in range: ", clip["title"], clip_date.strftime(TWITCH_API_TIME_FORMAT))
+        continue
+      
+      if (args.title is not None) and (args.title.lower() not in clip['title'].lower()):
+        continue
+        
+      if (args.creator is not None) and (args.creator.lower() not in clip['creator_name'].lower()):
         continue
 
       add_clip = continue_adding
@@ -131,6 +141,7 @@ if __name__ == '__main__':
       if views < 5:
         continue_fetching = False
         break
+    print(f"Checked {num_checked} clips so far.")
       
   print(f"Got {len(video_clips)} clips.")
 

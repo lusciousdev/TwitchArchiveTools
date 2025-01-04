@@ -1,7 +1,7 @@
 import re
 import requests
 
-MEDIACMS_VIDEO_REGEX = re.compile("(https?\:\/\/[A-Za-z0-9\.]+)\/view\?m=(.*)")
+MEDIACMS_VIDEO_REGEX = re.compile(r"(https?\:\/\/[A-Za-z0-9\.]+)\/view\?m=(.*)")
 
 class MediaCMS_API:
   base_url = ""
