@@ -1,6 +1,5 @@
 import argparse
-import os
-from datetime import datetime, timedelta
+import datetime
 from luscioustwitch import *
 import math
     
@@ -17,8 +16,8 @@ if __name__ == '__main__':
   
   args = parser.parse_args()
   
-  start_datetime = datetime.strptime(args.start, TWITCH_API_TIME_FORMAT)
-  end_datetime = datetime.strptime(args.end, TWITCH_API_TIME_FORMAT)
+  start_datetime = datetime.datetime.strptime(args.start, TWITCH_API_TIME_FORMAT)
+  end_datetime = datetime.datetime.strptime(args.end, TWITCH_API_TIME_FORMAT)
   
   with open(args.secrets, 'r') as cred_file:
     cred_json = json.load(cred_file)
@@ -38,7 +37,6 @@ if __name__ == '__main__':
   if args.category is not None:
     category_id = twitch_api.get_category_id(args.category)
     print(f"{args.category} - {category_id}")
-    # clip_params["game_id"] = category_id
   
   clip_count = 0
   continue_fetching = True
@@ -50,31 +48,32 @@ if __name__ == '__main__':
     else:
       continue_fetching = False
     
+    clip : TwitchClip
     for clip in clips:
-      if int(clip['view_count']) < args.minimum:
+      if int(clip.view_count) < args.minimum:
         continue_fetching = False
         break
       
-      clip_file_name = "{view_count}_[[{id}]].mp4".format(**clip)
+      clip_file_name = f"{clip.view_count}_[[{clip.clip_id}]].mp4"
       
       clip_match = True
       
-      if (args.find is not None) and (args.find.lower() not in clip['title'].lower()):
+      if (args.find is not None) and (args.find.lower() not in clip.title.lower()):
         clip_match = False
       
-      if (args.user is not None) and (args.user.lower() not in clip['creator_name'].lower()):
+      if (args.user is not None) and (args.user.lower() not in clip.creator_name.lower()):
         clip_match = False
         
-      if (category_id is not None) and (category_id != clip['game_id']):
+      if (category_id is not None) and (category_id != clip.game_id):
         clip_match = False
       
       if clip_match:
         clip_count += 1
-        title = f"\"{clip['title']}\"".ljust(60 - int(math.log10(clip_count)))
-        creator = f"by {clip['creator_name']}".ljust(25)
-        views = f"({clip['view_count']} views)".ljust(15)
+        title = f"\"{clip.title}\"".ljust(60 - int(math.log10(clip_count)))
+        creator = f"by {clip.creator_name}".ljust(25)
+        views = f"({clip.view_count} views)".ljust(15)
         # print(f"{title} {creator} https://clips.twitch.tv/{clip['id']} Views: {clip['view_count']} Date: {clip['created_at']})")
-        print(f"{clip_count}. {title} {creator} {views} ({clip['created_at']}) https://clips.twitch.tv/{clip['id']}")
+        print(f"{clip_count}. {title} {creator} {views} ({clip.created_at.strftime(TWITCH_API_TIME_FORMAT)}) https://clips.twitch.tv/{clip.clip_id}")
   
   print(f"Clip count: {clip_count}")
   

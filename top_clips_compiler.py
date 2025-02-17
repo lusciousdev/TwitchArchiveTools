@@ -4,6 +4,7 @@ import os
 import subprocess
 import math
 import pytz
+import datetime
 from pathlib import Path
 from datetime import datetime, timedelta
 from util.mediacms import MediaCMS_API
@@ -11,15 +12,15 @@ from luscioustwitch import *
 
 FONT_SIZE=36
 
-def get_clip_true_time(twitch_api, clip_info):
-  if clip_info['video_id'] != '':
-    video_info = twitch_api.get_video(clip_info['video_id'])
-    offset = int(clip_info['vod_offset'])
-    vod_start = datetime.strptime(video_info['created_at'], TWITCH_API_TIME_FORMAT)
+def get_clip_true_time(twitch_api : TwitchAPI, clip_info : TwitchClip):
+  if clip_info.video_id != '':
+    video_info = twitch_api.get_video(clip_info.video_id)
+    offset = int(clip_info.vod_offset)
+    vod_start = video_info.created_at
     clip_time = vod_start + timedelta(seconds=offset)
     return clip_time
   else:
-    return datetime.strptime(clip_info['created_at'], TWITCH_API_TIME_FORMAT)
+    return clip_info.created_at
     
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
@@ -61,9 +62,9 @@ if __name__ == '__main__':
     buffered_end_datetime = end_datetime + timedelta(hours = args.buffer)
   else:
     video_info = twitch_api.get_video(args.stream)
-    start_datetime = pytz.utc.localize(datetime.strptime(video_info["created_at"], TWITCH_API_TIME_FORMAT), is_dst=None).astimezone(local)
+    start_datetime = pytz.utc.localize(video_info.created_at, is_dst=None).astimezone(local)
     buffered_start_datetime = start_datetime
-    durstr = video_info['duration']
+    durstr = video_info.duration
     durdt = datetime.strptime(durstr, "%Hh%Mm%Ss") if 'h' in durstr else datetime.strptime(durstr, "%Mm%Ss") if 'm' in durstr else datetime.strptime(durstr, "%Ss")
     duration = timedelta(hours=durdt.hour, minutes=durdt.minute, seconds=durdt.second)
     end_datetime = start_datetime + duration
@@ -100,31 +101,33 @@ if __name__ == '__main__':
     else:
       continue_fetching = False
 
+    clip : TwitchClip
     for clip in clips:
       num_checked += 1
-      views = int(clip["view_count"])
+      views = int(clip.view_count)
       clip_date = pytz.utc.localize(get_clip_true_time(twitch_api, clip), is_dst=None).astimezone(local)
       
       if not (buffered_start_datetime < clip_date < buffered_end_datetime):
-        print("Clip not in range: ", clip["title"], clip_date.strftime(TWITCH_API_TIME_FORMAT))
+        print("Clip not in range: ", clip.title, clip_date.strftime(TWITCH_API_TIME_FORMAT))
         continue
       
-      if (args.title is not None) and (args.title.lower() not in clip['title'].lower()):
+      if (args.title is not None) and (args.title.lower() not in clip.title.lower()):
         continue
         
-      if (args.creator is not None) and (args.creator.lower() not in clip['creator_name'].lower()):
+      if (args.creator is not None) and (args.creator.lower() not in clip.creator_name.lower()):
         continue
 
       add_clip = continue_adding
       if continue_adding:
+        c : typing.Tuple[datetime.datetime, int, TwitchClip]
         for c in video_clips:
-          if (clip["video_id"] == '' or clip["vod_offset"] == None or c[2]["video_id"] == '' or c[2]["vod_offset"] == None):
+          if (clip.video_id == '' or clip.vod_offset == None or c[2].video_id == '' or c[2].vod_offset == None):
             if abs(c[0] - clip_date).total_seconds() < 90:
-              print(f"Skipping \"{clip['title']}\" because \"{c[2]['title']}\" was already included.")
+              print(f"Skipping \"{clip.title}\" because \"{c[2].title}\" was already included.")
               add_clip = False
           # check if clips are from the same day and within 90 seconds of each other.
-          elif (c[2]["video_id"] == clip["video_id"]) and (abs(int(c[2]["vod_offset"]) - int(clip["vod_offset"])) < 90):
-            print(f"Skipping \"{clip['title']}\" because \"{c[2]['title']}\" was already included.")
+          elif (c[2].video_id == clip.video_id) and (abs(int(c[2].vod_offset) - int(clip.vod_offset)) < 90):
+            print(f"Skipping \"{clip.title}\" because \"{c[2].title}\" was already included.")
             add_clip = False
         
       stats['clips']['list'].append(clip)
@@ -167,13 +170,14 @@ if __name__ == '__main__':
     print("Getting all videos on channel.")
     videos = twitch_api.get_all_videos(video_params)
     
+    video : TwitchVideo
     for video in videos:
-      vod_date = pytz.utc.localize(datetime.strptime(video['published_at'], TWITCH_API_TIME_FORMAT), is_dst=None).astimezone(local)
+      vod_date = pytz.utc.localize(video.published_at, is_dst=None).astimezone(local)
       
       if vod_date > buffered_start_datetime and vod_date < buffered_end_datetime:
         stats['videos']['list'].append(video)
-        print(f"Fetching chat for vod {video['id']} - \"{video['title']}\"")
-        vid_chat = gql_api.get_chat_messages(video['id'])
+        print(f"Fetching chat for vod {video.video_id} - \"{video.title}\"")
+        vid_chat = gql_api.get_chat_messages(video.video_id)
         stats['chat']['list'].extend(vid_chat)
         
     stats['clips']['count']  = len(stats['clips']['list'])
@@ -184,7 +188,7 @@ if __name__ == '__main__':
     stats['chat']['chatters'] = { 'top': [], 'dict': {} }
     
     for clip in stats['clips']['list']:
-      creator = clip['creator_name']
+      creator = clip.creator_name
       if creator not in stats['clips']['creators']['dict']:
         stats['clips']['creators']['dict'][creator] = 1
       else:
@@ -221,10 +225,10 @@ if __name__ == '__main__':
         clip = video_clips[i][2]
         file_name = "{id}.mp4".format(**clip)
         if not os.path.exists(file_name):
-          print(f"Downloading {clip['id']}.")
-          gql_api.download_clip(clip['id'], "./temp.mp4")
+          print(f"Downloading {clip.clip_id}.")
+          gql_api.download_clip(clip.clip_id, "./temp.mp4")
 
-          print(f"Converting {clip['id']} to 720p h264.")
+          print(f"Converting {clip.clip_id} to 720p h264.")
           o = subprocess.run(["ffmpeg", "-y", "-i", "./temp.mp4", "-c:v", "libx264", "-preset", "fast", "-vf", "scale=1280:720", './temp2.mp4'], capture_output = True)
           
           name_format = f"#{len(video_clips) - i} - {{title}} - clipped by {{creator_name}}"
@@ -236,7 +240,7 @@ if __name__ == '__main__':
           clip_date  = "{clip_date}".format(clip_date=video_clips[i][0].strftime("%Y-%m-%d"))
           
           text_start_time = 0
-          text_end_time = math.floor(min(args.text_duration, float(clip['duration'])))
+          text_end_time = math.floor(min(args.text_duration, float(clip.duration)))
           
           runescape_rel_path = os.path.relpath(runescape_font_path).replace('\\', '/')
           drawtext_cmd = f"drawtext=fontfile='{runescape_rel_path}':text='{clip_title}':fontcolor=yellow:fontsize={FONT_SIZE}:box=1:boxcolor=black@0.5:boxborderw=5:x=20:y=20:enable='between(t,{text_start_time},{text_end_time})',drawtext=fontfile='{runescape_rel_path}':text='{clip_views}':fontcolor=yellow:fontsize={FONT_SIZE}:box=1:boxcolor=black@0.7:boxborderw=5:x=20:y=h-th-20:enable='between(t,{text_start_time},{text_end_time})',drawtext=fontfile='{runescape_rel_path}':text='{clip_date}':fontcolor=yellow:fontsize={FONT_SIZE}:box=1:boxcolor=black@0.7:boxborderw=5:x=w-tw-20:y=h-th-20:enable='between(t,{text_start_time},{text_end_time})'"
@@ -248,13 +252,13 @@ if __name__ == '__main__':
           os.remove("./temp2.mp4")
           os.rename("./temp3.mp4", file_name)
         else:
-          print(f"{clip['id']} already downloaded.")
+          print(f"{clip.clip_id} already downloaded.")
 
         try:
           concatfile.write(f"file {file_name}\n")
-          descfile.write(f"\"{clip['title']}\"\nhttps://clips.twitch.tv/{clip['id']}\n")
+          descfile.write(f"\"{clip.title}\"\nhttps://clips.twitch.tv/{clip.clip_id}\n")
         except:
-          print(f"Failed to write \"\"{clip['title']}\"\nhttps://clips.twitch.tv/{clip['id']}\" to file.")
+          print(f"Failed to write \"\"{clip.title}\"\nhttps://clips.twitch.tv/{clip.clip_id}\" to file.")
 
   print("Concatenating all clips.")
   o = subprocess.run(["ffmpeg", "-y", "-f", "concat", "-i", "concat.txt", "-c", "copy", args.output], capture_output = True)
